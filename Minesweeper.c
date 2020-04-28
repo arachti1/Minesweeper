@@ -1,11 +1,42 @@
 #include "Minesweeper.h"
 
-int			MGameInit(MGame *game) {
+XEnv		*XEnvInit(MGame *game, XEnv *xenv) {
+	if (!((xenv = (XEnv *)malloc(sizeof(XEnv)))
+		&& (xenv->d = XOpenDisplay(getenv("DISPLAY")))
+		&& (xenv->w = XCreateSimpleWindow(xenv->d, XDefaultRootWindow(xenv->d), 0, 0, game->win_w, game->win_h, 2, BlackPixel(xenv->d, XDefaultScreen(xenv->d)), WhitePixel(xenv->d, XDefaultScreen(xenv->d))))
+		&& (xenv->fd = XLoadQueryFont(xenv->d, "fixed")) && (xenv->gcv.font = xenv->fd->fid)
+		&& (xenv->gc = XCreateGC(xenv->d, xenv->w, GCFont | GCForeground, &(xenv->gcv))))) {
+		printf("XERROR\n");
+		return (NULL);
+	}
+
+	XSetForeground(xenv->d, xenv->gc, BlackPixel(xenv->d, XDefaultScreen(xenv->d)));
+	XMapWindow(xenv->d, xenv->w);
+	XRaiseWindow(xenv->d, xenv->w);
+
+	return (xenv);
+}
+
+MGame			*MGameInit(MGame *game, int ac, const char *av[]) {
+	if (ac != 4
+		|| !(game = (MGame*)malloc(sizeof(MGame)))
+		|| (game->width = atoi(av[1])) <= 0
+		|| (game->height = atoi(av[2])) <= 0
+		|| (game->mines = atoi(av[3])) >= game->width * game->height) {
+		printf("./Minesweeper usage:	x_size y_size n_mines\n\t\t\t[    > 0    ] [< x * y]\n");
+		return (NULL);
+	}
+	printf("%lu, %lu, %lu\n", game->win_w, game->win_h, game->mines);
+
 	game->field = (char **)malloc(sizeof(char *) * game->width);
+	game->discover_field = (char **)malloc(sizeof(char *) * game->width);
 	for (int i = 0; i < game->width; ++i) {
 		game->field[i] = (char *)malloc(sizeof(char) * game->height);
-		for (int j = 0; j < game->height; ++j)
+		game->discover_field[i] = (char *)malloc(sizeof(char) * game->height);
+		for (int j = 0; j < game->height; ++j) {
 			game->field[i][j] = '0';
+			game->discover_field[i][j] = 0;
+		}
 	}
 	long int x, y = 0;
 	for (int i = 0; i < game->mines; ++i) {
@@ -15,78 +46,67 @@ int			MGameInit(MGame *game) {
 			i--;
 			continue;
 		}
-		printf("%li, %li\n", x, y);
 		game->field[x][y] = '*';
-		if (x > 0 && y > 0)
-			game->field[x - 1][y - 1] = game->field[x - 1][y - 1] == '*' ? '*' : game->field[x - 1][y - 1] + 1;
-		if (x > 0)
-			game->field[x - 1][y] = game->field[x - 1][y] == '*' ? '*' : game->field[x - 1][y] + 1;
-		if (x > 0 && y < game->height - 1)
-			game->field[x - 1][y - 1] = game->field[x - 1][y - 1] == '*' ? '*' : game->field[x - 1][y - 1] + 1;
-		if (y > 0)
-			game->field[x][y - 1] = game->field[x][y - 1] == '*' ? '*' : game->field[x][y - 1] + 1;
-		if (y < game->height - 1)
-			game->field[x][y + 1] = game->field[x][y + 1] == '*' ? '*' : game->field[x][y + 1] + 1;
-		if (x < game->width - 1 && y > 0) {
-			game->field[x + 1][y - 1] = game->field[x + 1][y - 1] == '*' ? '*' : game->field[x + 1][y - 1] + 1;
-		printf("ok\n");
+		for (int sub_y = y - 1; sub_y <= y + 1; sub_y++) {
+			for (int sub_x = x - 1; sub_x <= x + 1; sub_x++) {
+				if (sub_x >= 0 && sub_x < game->width
+					&& sub_y >= 0 && sub_y < game->height
+					&& game->field[sub_x][sub_y] != '*')
+					game->field[sub_x][sub_y] += 1;
+			}
 		}
-		if (x < game->width - 1)
-			game->field[x + 1][y] = game->field[x + 1][y] == '*' ? '*' : game->field[x + 1][y] + 1;
-		if (x < game->width - 1 && y < game->height - 1)
-			game->field[x + 1][y + 1] = game->field[x + 1][y + 1] == '*' ? '*' : game->field[x + 1][y + 1] + 1;
-		for (int j = 0; j < game->width; ++j)
-			printf("%s\n", game->field[j]);
 	}
-	return (0);
+	game->win_w = ft_min(game->width * 50, 800);
+	game->win_h = ft_min(game->height * 50, 800);
+	return (game);
 }
 
-int			main(int ac, char const *av[]) {
+void		MDrawGame(MGame *game, XEnv *xenv) {
+	for (int x = 0; x <= game->width; ++x)
+		XDrawLine(xenv->d, xenv->w, xenv->gc, x * game->win_w / game->width, 0, x * game->win_w / game->width, game->win_h);
+	for (int y = 0; y <= game->height; ++y)
+		XDrawLine(xenv->d, xenv->w, xenv->gc, 0, y * game->win_h / game->height, game->win_w, y * game->win_h / game->height);
+}
+
+int			main(int ac, const char *av[]) {
 
 	MGame		*game;
-
-	if (ac != 4
-		|| !(game = (MGame*)malloc(sizeof(MGame)))
-		|| (game->width = atoi(av[1])) <= 0
-		|| (game->height = atoi(av[2])) <= 0
-		|| (game->mines = atoi(av[3])) >= game->width * game->height / 2) {
-		printf("./Minesweeper usage:	x_size y_size n_mines\n\t\t\t[    > 0    ] [< x*y / 2]");
+	if (!(game = MGameInit(game, ac, av)))
 		return (0);
-	}
-	printf("%i, %i, %i\n", game->width, game->height, game->mines);
-	MGameInit(game);
-	XEnv		*xenv;
 
 	printf("okok\n");
-	if (!(xenv = (XEnv *)malloc(sizeof(XEnv)))
-		|| !(xenv->d = XOpenDisplay(getenv("DISPLAY")))
-		|| !(xenv->w = XCreateSimpleWindow(xenv->d, RootWindow(xenv->d, XDefaultScreen(xenv->d)), 0, 0, game->width * 50, game->height * 50, 2, BlackPixel(xenv->d, XDefaultScreen(xenv->d)), WhitePixel(xenv->d, XDefaultScreen(xenv->d))))
-		|| !(xenv->fd = XLoadQueryFont(xenv->d, "fixed")) || !(xenv->gcv.font = xenv->fd->fid)
-		|| !(xenv->gc = XCreateGC(xenv->d, xenv->w, GCFont | GCForeground, &(xenv->gcv)))) {
-		printf("XERROR\n");
+	for (int j = 0; j < game->width; ++j)
+		printf("%s\n", game->field[j]);
+
+	XEnv		*xenv;
+	if (!(xenv = XEnvInit(game, xenv)))
 		return (0);
-	}
-	XSetForeground(xenv->d, xenv->gc, BlackPixel(xenv->d, XDefaultScreen(xenv->d)));
-	XMapWindow(xenv->d, xenv->w);
-	XRaiseWindow(xenv->d, xenv->w);
-	for (int x = 0; x <= game->width; ++x) {
-		XDrawLine(xenv->d, xenv->w, xenv->gc, x * 50, 0, x * 50, game->height * 50);
-	}
-	for (int y = 0; y <= game->height; ++y) {
-		XDrawLine(xenv->d, xenv->w, xenv->gc, 0, y * 50, game->width * 50, y * 50);
-	}
-	XSelectInput(xenv->d, xenv->w, KeyPressMask | ButtonPressMask);
+	Atom del_window = XInternAtom(xenv->d, "WM_DELETE_WINDOW", 0);
+	XSetWMProtocols(xenv->d, xenv->w, &del_window, 1);
+
+	MDrawGame(game, xenv);
+	XSelectInput(xenv->d, xenv->w, 16777215);
+	XSelectInput(xenv->d, XDefaultRootWindow(xenv->d), FocusChangeMask);
+	int i = 0;
 	while (xenv->e.xkey.keycode != 9) {
 		XNextEvent(xenv->d, &(xenv->e));
+		i++;
 		switch(xenv->e.type) {
-			case ButtonPress:
-				printf("x, y = %i, %i\n", xenv->e.xbutton.x / 50, xenv->e.xbutton.y / 50);
+			case ButtonPress: 
+			case ButtonRelease:
+				printf("%i(%s) : [ %lu %lu ]\n", xenv->e.xbutton.button, (xenv->e.xbutton.type == ButtonPress) ? "on" : "off", xenv->e.xbutton.x * game->width / game->win_w, xenv->e.xbutton.y * game->height / game->win_h);
 				break;
 			case KeyPress:
 				printf("key = %i\n", xenv->e.xkey.keycode);
 				break;
+			case Expose:
+				MDrawGame(game, xenv);
+			case ClientMessage:
+				goto exit;
 		}
+		printf("%i : %s [%i]\n", i, event_names[xenv->e.type], xenv->e.type);
 	}
+	exit:
 	XDestroyWindow(xenv->d, xenv->w);
 	XFreeGC(xenv->d, xenv->gc);
 	XCloseDisplay(xenv->d);
