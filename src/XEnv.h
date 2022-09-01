@@ -1,10 +1,8 @@
-#ifndef			MINESWEEPER_H
-# define		MINESWEEPER_H
+#ifndef			XENV_H
+# define		XENV_H
 
-# include		<stdlib.h>
-# include		<stdio.h>
-# include		<X11/Xlib.h>
-# include		"libft/inc/libft.h"
+#include	<X11/Xlib.h>
+#include	"Minesweeper.h"
 
 static char *event_names[] = {
    "",
@@ -44,13 +42,6 @@ static char *event_names[] = {
    "MappingNotify"
 };
 
-typedef			struct _MGame {
-	size_t		width, height, mines, seen;
-	size_t		win_w, win_h;
-	char		**field;
-	char		**discover_field;
-}				MGame;
-
 typedef			struct _XEnv {
 	int			larg, haut, s;
 	Display		*d;
@@ -60,5 +51,10 @@ typedef			struct _XEnv {
 	XEvent		e;
 	XGCValues	gcv;
 }				XEnv;
+
+XEnv		*XEnvInit(int win_w, int win_h);
+void		XDrawGameInit(MGame *game, XEnv *xenv);
+int		XDrawImage(int x, int y, char *path, XEnv *xenv);
+
 
 #endif
